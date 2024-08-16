@@ -7,6 +7,7 @@ The view controller that scans and displays NDEF messages.
 
 import UIKit
 import CoreNFC
+import Foundation
 
 /// - Tag: MessagesTableViewController
 class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDelegate {
@@ -80,24 +81,41 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                     return
                 }
                 
-                tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                    var statusMessage: String
-                    if nil != error || nil == message {
-                        let sm = "error is \(error) and message is \(message)"
-                        print(sm)
-                        statusMessage = "Fail to read NDEF from tag"
-                    } else {
-                        statusMessage = "Found 1 NDEF message"
-                        DispatchQueue.main.async {
-                            // Process detected NFCNDEFMessage objects.
-                            self.detectedMessages.append(message!)
-                            self.tableView.reloadData()
-                        }
+                guard let url = URL(string: "http://10.0.0.25:8000") else {
+                    session.alertMessage = "Bad URL"
+                    session.invalidate()
+                    return
+                }
+
+                // Make a curl request
+                var request = URLRequest(url: url)
+                request.httpMethod = "GET"
+
+                let urlSession = URLSession.shared
+                let task = urlSession.dataTask(with: request) { data, response, error in
+                    if let error = error {
+                        session.alertMessage = "Error when constructing request: \(error.localizedDescription)"
+                        session.invalidate()
+                        return
                     }
                     
-                    session.alertMessage = statusMessage
-                    session.invalidate()
-                })
+                    if let httpResponse = response as? HTTPURLResponse {
+                        // Do something with HTTP response
+                        // print("Status Code: \(httpResponse.statusCode)")
+                    }
+
+                    if let data = data,
+                       let responseString = String(data: data, encoding: .utf8) {
+                        // Do something with response data
+                        // print("Response Data: \(responseString)")
+                    }
+                }
+                task.resume()
+
+                let statusMessage = "Sent ping to localhost!"
+                session.alertMessage = statusMessage
+                session.invalidate()
+                return
             })
         })
     }
