@@ -55,69 +55,61 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
 
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
-        if tags.count > 1 {
-            let retryInterval = DispatchTimeInterval.milliseconds(500)
-            session.alertMessage = "More than 1 tag is detected, please remove all tags and try again."
-            DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
-                session.restartPolling()
-            })
-            return
-        }
-        
-        let tag = tags.first!
-        session.connect(to: tag, completionHandler: { (error: Error?) in
-            if nil != error {
-                session.alertMessage = "Unable to connect to tag."
-                session.invalidate()
-                return
-            }
-            
-            tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
-                if .notSupported == ndefStatus {
-                    session.alertMessage = "Tag is not NDEF compliant"
-                    session.invalidate()
-                    return
-                } else if nil != error {
-                    session.alertMessage = "Unable to query NDEF status of tag"
+        for tag in tags {
+            session.connect(to: tag, completionHandler: { (error: Error?) in
+                if nil != error {
+                    session.alertMessage = "Unable to connect to tag."
                     session.invalidate()
                     return
                 }
                 
-                tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                    if nil != error {
-                        if .readWrite == ndefStatus {
-                            self.writeBlankNDEFTag(tag: tag, session: session)
-                            return
-                        }
-                    }
-                })
-
-                guard let url = URL(string: "http://10.0.0.25:8000") else {
-                    session.alertMessage = "Bad URL"
-                    session.invalidate()
-                    return
-                }
-
-                var request = URLRequest(url: url)
-                request.httpMethod = "GET"
-
-                let urlSession = URLSession.shared
-                let task = urlSession.dataTask(with: request) { data, response, error in
-                    if let error = error {
-                        session.alertMessage = "Error when constructing request: \(error.localizedDescription)"
+                tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
+                    if .notSupported == ndefStatus {
+                        session.alertMessage = "Tag is not NDEF compliant"
+                        session.invalidate()
+                        return
+                    } else if nil != error {
+                        session.alertMessage = "Unable to query NDEF status of tag"
                         session.invalidate()
                         return
                     }
-                }
-                task.resume()
 
-                let retryInterval = DispatchTimeInterval.milliseconds(500)
-                DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
-                    session.restartPolling()
+                    tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
+                        if nil != error {
+                            if .readWrite == ndefStatus {
+                                self.writeBlankNDEFTag(tag: tag, session: session)
+                                return
+                            }
+                        }
+                    })
+
+                    guard let url = URL(string: "http://10.0.0.25:8000") else {
+                        session.alertMessage = "Bad URL"
+                        session.invalidate()
+                        return
+                    }
+
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "GET"
+
+                    let urlSession = URLSession.shared
+                    let task = urlSession.dataTask(with: request) { data, response, error in
+                        if let error = error {
+                            session.alertMessage = "Error when constructing request: \(error.localizedDescription)"
+                            session.invalidate()
+                            return
+                        }
+                    }
+                    task.resume()
+
+                    let retryInterval = DispatchTimeInterval.milliseconds(500)
+                    DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
+                        session.restartPolling()
+                    })
+                    return
                 })
-                return
             })
-        })
+        }
     }
     
     /// - Tag: sessionBecomeActive
