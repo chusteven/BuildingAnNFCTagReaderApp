@@ -84,8 +84,11 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                 }
                 
                 tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                    if nil != error || nil == message {
-                        print("error is \(error) and message is \(message)")
+                    if nil != error {
+                        if .readWrite == ndefStatus {
+                            self.writeBlankNDEFTag(tag: tag, session: session)
+                            return
+                        }
                     }
                 })
 
@@ -160,4 +163,22 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
             self.tableView.reloadData()
         }
     }
+
+    func writeBlankNDEFTag(tag: NFCNDEFTag, session: NFCNDEFReaderSession) {
+            let emptyRecord = NFCNDEFPayload(format: .empty, type: Data(), identifier: Data(), payload: Data())
+            let emptyMessage = NFCNDEFMessage(records: [emptyRecord])
+
+            tag.writeNDEF(emptyMessage) { (error) in
+                if let error = error {
+                    print("Failed to write to the tag: \(error.localizedDescription)")
+                    session.invalidate(errorMessage: "Write failed. Please try again.")
+                } else {
+                    print("Successfully wrote blank data to the NFC tag.")
+                    let retryInterval = DispatchTimeInterval.milliseconds(500)
+                    DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
+                        session.restartPolling()
+                    })
+                }
+            }
+        }
 }
