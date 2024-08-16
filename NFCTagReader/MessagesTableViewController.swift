@@ -22,6 +22,10 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
 
     /// - Tag: beginScanning
     @IBAction func beginScanning(_ sender: Any) {
+        self.startNFCSession()
+    }
+
+    func startNFCSession() {
         guard NFCNDEFReaderSession.readingAvailable else {
             let alertController = UIAlertController(
                 title: "Scanning Not Supported",
@@ -52,7 +56,6 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
         if tags.count > 1 {
-            // Restart polling in 500ms
             let retryInterval = DispatchTimeInterval.milliseconds(500)
             session.alertMessage = "More than 1 tag is detected, please remove all tags and try again."
             DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
@@ -61,7 +64,6 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
             return
         }
         
-        // Connect to the found tag and perform NDEF message reading
         let tag = tags.first!
         session.connect(to: tag, completionHandler: { (error: Error?) in
             if nil != error {
@@ -81,13 +83,18 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                     return
                 }
                 
+                tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
+                    if nil != error || nil == message {
+                        print("error is \(error) and message is \(message)")
+                    }
+                })
+
                 guard let url = URL(string: "http://10.0.0.25:8000") else {
                     session.alertMessage = "Bad URL"
                     session.invalidate()
                     return
                 }
 
-                // Make a curl request
                 var request = URLRequest(url: url)
                 request.httpMethod = "GET"
 
@@ -98,23 +105,13 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                         session.invalidate()
                         return
                     }
-                    
-                    if let httpResponse = response as? HTTPURLResponse {
-                        // Do something with HTTP response
-                        // print("Status Code: \(httpResponse.statusCode)")
-                    }
-
-                    if let data = data,
-                       let responseString = String(data: data, encoding: .utf8) {
-                        // Do something with response data
-                        // print("Response Data: \(responseString)")
-                    }
                 }
                 task.resume()
 
-                let statusMessage = "Sent ping to localhost!"
-                session.alertMessage = statusMessage
-                session.invalidate()
+                let retryInterval = DispatchTimeInterval.milliseconds(500)
+                DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
+                    session.restartPolling()
+                })
                 return
             })
         })
@@ -127,12 +124,16 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
     
     /// - Tag: endScanning
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
-        // Check the invalidation reason from the returned error.
         if let readerError = error as? NFCReaderError {
-            // Show an alert when the invalidation reason is not because of a
-            // successful read during a single-tag read session, or because the
-            // user canceled a multiple-tag read session from the UI or
-            // programmatically using the invalidate method call.
+            if readerError.code == .readerSessionInvalidationErrorSessionTimeout {
+                print("Session timeout, restarting after 0.5 second...")
+                let retryInterval = DispatchTimeInterval.milliseconds(500)
+                DispatchQueue.main.asyncAfter(deadline: .now() + retryInterval) {
+                    self.startNFCSession()
+                }
+                return
+            }
+
             if (readerError.code != .readerSessionInvalidationErrorFirstNDEFTagRead)
                 && (readerError.code != .readerSessionInvalidationErrorUserCanceled) {
                 let alertController = UIAlertController(
@@ -147,7 +148,7 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
             }
         }
 
-        // To read new tags, a new session instance is required.
+        // To read new tags, a new session instance is required
         self.session = nil
     }
 
