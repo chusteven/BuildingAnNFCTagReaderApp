@@ -38,7 +38,7 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
         }
 
         session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
-        session?.alertMessage = "Hold your iPhone near the item to learn more about it."
+        session?.alertMessage = "Start looking for treasure!"
         session?.begin()
     }
 
@@ -55,37 +55,41 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
 
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
-        for tag in tags {
+        var foundError = false
+        for tag in tags { // TODO (stevenchu): Consider... concurrency gasp
             session.connect(to: tag, completionHandler: { (error: Error?) in
                 if nil != error {
-                    session.alertMessage = "Unable to connect to tag."
-                    session.invalidate()
+                    foundError = true
                     return
                 }
                 
                 tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
                     if .notSupported == ndefStatus {
-                        session.alertMessage = "Tag is not NDEF compliant"
-                        session.invalidate()
+                        foundError = true
                         return
                     } else if nil != error {
-                        session.alertMessage = "Unable to query NDEF status of tag"
-                        session.invalidate()
+                        foundError = true
                         return
                     }
 
                     tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                        if nil != error {
-                            if .readWrite == ndefStatus {
-                                self.writeBlankNDEFTag(tag: tag, session: session)
-                                return
+                        if let nfcError = error as NSError? {
+                            if nfcError.domain == "NFCErrorDomain" && nfcError.code == 403 {
+                                if .readWrite == ndefStatus {
+                                    self.writeBlankNDEFTag(tag: tag) {
+                                        success in
+                                        if !success {
+                                            foundError = true
+                                            return
+                                        }
+                                    }
+                                }
                             }
                         }
                     })
 
                     guard let url = URL(string: "http://10.0.0.25:8000") else {
-                        session.alertMessage = "Bad URL"
-                        session.invalidate()
+                        foundError = true
                         return
                     }
 
@@ -96,20 +100,22 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                     let task = urlSession.dataTask(with: request) { data, response, error in
                         if let error = error {
                             session.alertMessage = "Error when constructing request: \(error.localizedDescription)"
-                            session.invalidate()
+                            foundError = true
                             return
                         }
                     }
                     task.resume()
-
-                    let retryInterval = DispatchTimeInterval.milliseconds(500)
-                    DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
-                        session.restartPolling()
-                    })
                     return
                 })
             })
         }
+        if foundError {
+            session.invalidate()
+        }
+        let retryInterval = DispatchTimeInterval.milliseconds(500)
+        DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
+            session.restartPolling()
+        })
     }
     
     /// - Tag: sessionBecomeActive
@@ -156,21 +162,18 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
         }
     }
 
-    func writeBlankNDEFTag(tag: NFCNDEFTag, session: NFCNDEFReaderSession) {
+    func writeBlankNDEFTag(tag: NFCNDEFTag, completion: @escaping (Bool) -> Void) {
             let emptyRecord = NFCNDEFPayload(format: .empty, type: Data(), identifier: Data(), payload: Data())
             let emptyMessage = NFCNDEFMessage(records: [emptyRecord])
 
             tag.writeNDEF(emptyMessage) { (error) in
                 if let error = error {
                     print("Failed to write to the tag: \(error.localizedDescription)")
-                    session.invalidate(errorMessage: "Write failed. Please try again.")
-                } else {
-                    print("Successfully wrote blank data to the NFC tag.")
-                    let retryInterval = DispatchTimeInterval.milliseconds(500)
-                    DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
-                        session.restartPolling()
-                    })
+                    completion(false)
+                    return
                 }
+                print("Successfully wrote blank data to the NFC tag.")
+                completion(true)
             }
         }
 }
