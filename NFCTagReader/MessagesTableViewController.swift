@@ -83,6 +83,8 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                 tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
                     var statusMessage: String
                     if nil != error || nil == message {
+                        let sm = "error is \(error) and message is \(message)"
+                        print(sm)
                         statusMessage = "Fail to read NDEF from tag"
                     } else {
                         statusMessage = "Found 1 NDEF message"
