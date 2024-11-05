@@ -88,7 +88,12 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                         }
                     })
 
-                    guard let url = URL(string: "http://10.0.0.25:8000") else {
+                    print("Found tag! Sending dummy HTTP request")
+
+                    // TODO (stevenchu): Refactor this into its own method
+                    // that will probably want to send along some data of the
+                    // NFC itself (like it's ID or position or... whatever)
+                    guard let url = URL(string: "http://192.168.64.1:8000") else {
                         foundError = true
                         return
                     }
@@ -110,7 +115,13 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
             })
         }
         if foundError {
+            // NOTE (stevenchu): This might be a thing... it wasn't working as well on my iPhone 7 as my iPhone 13 so...
+            // the internet says anything to do with an NFC session needs to happen inside the main thread who knows
+            // DispatchQueue.main.async {
+            //    session.invalidate()
+            // }
             session.invalidate()
+            return // Idk ...
         }
         let retryInterval = DispatchTimeInterval.milliseconds(500)
         DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
