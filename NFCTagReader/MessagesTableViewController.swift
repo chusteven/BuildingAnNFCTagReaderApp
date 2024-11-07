@@ -89,6 +89,10 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                     })
 
                     print("Found tag! Sending dummy HTTP request")
+                    let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
+                    let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
+
+                    print("Global Host: \(host), Global Port: \(port)")
 
                     // TODO (stevenchu): Refactor this into its own method
                     // that will probably want to send along some data of the

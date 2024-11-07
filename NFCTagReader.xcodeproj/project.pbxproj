@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1C00132E2CDC88340088ABB6 /* ConfigurationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C00132D2CDC88320088ABB6 /* ConfigurationViewController.swift */; };
 		B41052241EC2BA04006D9146 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B41052231EC2BA04006D9146 /* AppDelegate.swift */; };
 		B41052291EC2BA04006D9146 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B41052271EC2BA04006D9146 /* Main.storyboard */; };
 		B410522E1EC2BA04006D9146 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = B410522C1EC2BA04006D9146 /* LaunchScreen.storyboard */; };
@@ -18,6 +19,7 @@
 
 /* Begin PBXFileReference section */
 		1426D16B1ED030FC0082EAE0 /* NFCTagReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = NFCTagReader.entitlements; path = ../NFCTagReader.entitlements; sourceTree = "<group>"; };
+		1C00132D2CDC88320088ABB6 /* ConfigurationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationViewController.swift; sourceTree = "<group>"; };
 		B41052201EC2BA04006D9146 /* NFCTagReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NFCTagReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B41052231EC2BA04006D9146 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B41052281EC2BA04006D9146 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -65,6 +67,7 @@
 		B41052221EC2BA04006D9146 /* NFCTagReader */ = {
 			isa = PBXGroup;
 			children = (
+				1C00132D2CDC88320088ABB6 /* ConfigurationViewController.swift */,
 				B41052231EC2BA04006D9146 /* AppDelegate.swift */,
 				B47143DC1ECF6EC10026C5B4 /* MessagesTableViewController.swift */,
 				B47143DD1ECF6EC10026C5B4 /* MessagesTableViewController+DataSource.swift */,
@@ -186,6 +189,7 @@
 				B47143E11ECF6EC10026C5B4 /* PayloadsTableViewController.swift in Sources */,
 				B47143E01ECF6EC10026C5B4 /* MessagesTableViewController+DataSource.swift in Sources */,
 				B47143DF1ECF6EC10026C5B4 /* MessagesTableViewController.swift in Sources */,
+				1C00132E2CDC88340088ABB6 /* ConfigurationViewController.swift in Sources */,
 				B41052241EC2BA04006D9146 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
