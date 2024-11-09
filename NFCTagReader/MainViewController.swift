@@ -1,25 +1,13 @@
-/*
-See LICENSE folder for this sample’s licensing information.
-
-Abstract:
-The view controller that scans and displays NDEF messages.
-*/
-
 import UIKit
 import CoreNFC
 import Foundation
 
-/// - Tag: MessagesTableViewController
-class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDelegate {
+class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     // MARK: - Properties
-
     let reuseIdentifier = "reuseIdentifier"
     var detectedMessages = [NFCNDEFMessage]()
     var session: NFCNDEFReaderSession?
 
-    // MARK: - Actions
-
-    /// - Tag: beginScanning
     @IBAction func beginScanning(_ sender: Any) {
         self.startNFCSession()
     }
@@ -41,82 +29,95 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
         session?.begin()
     }
 
-    // MARK: - NFCNDEFReaderSessionDelegate
-
     /// - Tag: processingTagData
     func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {
         DispatchQueue.main.async {
             // Process detected NFCNDEFMessage objects.
             self.detectedMessages.append(contentsOf: messages)
-            self.tableView.reloadData()
         }
     }
 
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
         var foundError = false
-        for tag in tags { // TODO (stevenchu): Consider... concurrency gasp
-            session.connect(to: tag, completionHandler: { (error: Error?) in
-                if nil != error {
+        let tag = tags.first!
+
+        session.connect(to: tag, completionHandler: { (error: Error?) in
+            if nil != error {
+                foundError = true
+                return
+            }
+            
+            tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
+                if .notSupported == ndefStatus {
+                    foundError = true
+                    return
+                } else if nil != error {
                     foundError = true
                     return
                 }
-                
-                tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
-                    if .notSupported == ndefStatus {
-                        foundError = true
-                        return
-                    } else if nil != error {
-                        foundError = true
-                        return
-                    }
 
-                    tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                        if let nfcError = error as NSError? {
-                            if nfcError.domain == "NFCErrorDomain" && nfcError.code == 403 {
-                                if .readWrite == ndefStatus {
-                                    self.writeBlankNDEFTag(tag: tag) {
-                                        success in
-                                        if !success {
-                                            foundError = true
-                                            return
-                                        }
+                tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
+                    if let nfcError = error as NSError? {
+                        if nfcError.domain == "NFCErrorDomain" && nfcError.code == 403 {
+                            if .readWrite == ndefStatus {
+                                self.writeBlankNDEFTag(tag: tag) {
+                                    success in
+                                    if !success {
+                                        foundError = true
+                                        return
                                     }
                                 }
                             }
                         }
-                    })
+                    }
+                })
 
-                    print("Found tag! Sending dummy HTTP request")
-                    let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
-                    let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
+                print("Found tag! Sending dummy HTTP request")
+                let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
+                let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
+                let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
 
-                    print("Global Host: \(host), Global Port: \(port)\n")
+                print("Global Host: \(host), Global Port: \(port)\n")
+                
+                // TODO (stevenchu): Also need to read in the `id` of the tag and put that in the data body
+                // for the request too
+                let requestBody: [String: String] = ["role": responsibility]
+                guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
+                    session.alertMessage = "Failed to serialize request body."
+                    foundError = true
+                    return
+                }
+                
+                guard let url = URL(string: "http://\(host):\(port)") else {
+                    foundError = true
+                    return
+                }
 
-                    // TODO (stevenchu): Refactor this into its own method
-                    // that will probably want to send along some data of the
-                    // NFC itself (like it's ID or position or... whatever)
-                    guard let url = URL(string: "http://192.168.64.1:8000") else {
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = httpBody
+
+                let urlSession = URLSession.shared
+                let task = urlSession.dataTask(with: request) { data, response, error in
+                    if error != nil {
                         foundError = true
                         return
                     }
 
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "GET"
-
-                    let urlSession = URLSession.shared
-                    let task = urlSession.dataTask(with: request) { data, response, error in
-                        if let error = error {
-                            session.alertMessage = "Error when constructing request: \(error.localizedDescription)"
-                            foundError = true
-                            return
-                        }
+                    // Handle the response
+                    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                        // session.alertMessage = "Request succeeded."
+                    } else {
+                        // session.alertMessage = "Request failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? -1)"
                     }
-                    task.resume()
-                    return
-                })
+                }
+                task.resume()
+
+                return
             })
-        }
+        })
         if foundError {
             // NOTE (stevenchu): This might be a thing... it wasn't working as well on my iPhone 7 as my iPhone 13 so...
             // the internet says anything to do with an NFC session needs to happen inside the main thread who knows
@@ -172,7 +173,6 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
     func addMessage(fromUserActivity message: NFCNDEFMessage) {
         DispatchQueue.main.async {
             self.detectedMessages.append(message)
-            self.tableView.reloadData()
         }
     }
 
@@ -190,4 +190,5 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                 completion(true)
             }
         }
+
 }
