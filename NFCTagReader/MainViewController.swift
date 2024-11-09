@@ -39,98 +39,93 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
 
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
-        var foundError = false
-        let tag = tags.first!
+        guard let tag = tags.first else {
+            session.invalidate(errorMessage: "No NFC tag detected.")
+            return
+        }
 
-        session.connect(to: tag, completionHandler: { (error: Error?) in
-            if nil != error {
-                foundError = true
+        session.connect(to: tag) { error in
+            if let error = error {
+                session.invalidate(errorMessage: "Failed to connect to tag: \(error.localizedDescription)")
                 return
             }
-            
-            tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
-                if .notSupported == ndefStatus {
-                    foundError = true
+
+            tag.queryNDEFStatus { ndefStatus, capacity, error in
+                if ndefStatus == .notSupported {
+                    session.invalidate(errorMessage: "This tag does not support NDEF.")
                     return
-                } else if nil != error {
-                    foundError = true
+                }
+                if let error = error {
+                    session.invalidate(errorMessage: "Error querying NDEF status: \(error.localizedDescription)")
                     return
                 }
 
-                tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                    if let nfcError = error as NSError? {
-                        if nfcError.domain == "NFCErrorDomain" && nfcError.code == 403 {
-                            if .readWrite == ndefStatus {
-                                self.writeBlankNDEFTag(tag: tag) {
-                                    success in
-                                    if !success {
-                                        foundError = true
-                                        return
-                                    }
-                                }
-                            }
-                        }
-                    }
-                })
-
-                print("Found tag! Sending dummy HTTP request")
-                let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
-                let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
-                let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
-
-                print("Global Host: \(host), Global Port: \(port)\n")
-                
-                // TODO (stevenchu): Also need to read in the `id` of the tag and put that in the data body
-                // for the request too
-                let requestBody: [String: String] = ["role": responsibility]
-                guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
-                    session.alertMessage = "Failed to serialize request body."
-                    foundError = true
-                    return
-                }
-                
-                guard let url = URL(string: "http://\(host):\(port)") else {
-                    foundError = true
-                    return
-                }
-
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = httpBody
-
-                let urlSession = URLSession.shared
-                let task = urlSession.dataTask(with: request) { data, response, error in
-                    if error != nil {
-                        foundError = true
+                tag.readNDEF { message, error in
+                    if let error = error {
+                        session.invalidate(errorMessage: "Failed to read NFC tag: \(error.localizedDescription)")
                         return
                     }
 
-                    // Handle the response
-                    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                        // session.alertMessage = "Request succeeded."
-                    } else {
-                        // session.alertMessage = "Request failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? -1)"
+                    guard let message = message, let record = message.records.first else {
+                        session.invalidate(errorMessage: "No valid data found on the NFC tag.")
+                        return
                     }
-                }
-                task.resume()
 
-                return
-            })
-        })
-        if foundError {
-            // NOTE (stevenchu): This might be a thing... it wasn't working as well on my iPhone 7 as my iPhone 13 so...
-            // the internet says anything to do with an NFC session needs to happen inside the main thread who knows
-            // DispatchQueue.main.async {
-            //    session.invalidate()
-            // }
-            session.invalidate()
-            return // Idk ...
+                    // Parse the payload to extract the `id`
+                    guard let payloadString = String(data: record.payload, encoding: .utf8),
+                          let jsonData = payloadString.data(using: .utf8),
+                          let payloadDict = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any],
+                          let id = payloadDict["id"] as? Int else {
+                        session.invalidate(errorMessage: "Failed to parse payload.")
+                        return
+                    }
+
+                    print("Extracted ID: \(id)")
+
+                    // Get `role` from UserDefaults
+                    let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
+
+                    // Create the request body
+                    let requestBody: [String: Any] = ["id": id, "role": responsibility]
+                    guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
+                        session.invalidate(errorMessage: "Failed to create request body.")
+                        return
+                    }
+
+                    // Get the host and port from UserDefaults
+                    let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
+                    let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
+
+                    // Construct the URL
+                    guard let url = URL(string: "http://\(host):\(port)") else {
+                        session.invalidate(errorMessage: "Invalid host or port.")
+                        return
+                    }
+
+                    // Create the HTTP request
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = httpBody
+
+                    // Perform the HTTP request
+                    let urlSession = URLSession.shared
+                    let task = urlSession.dataTask(with: request) { data, response, error in
+                        if let error = error {
+                            session.invalidate(errorMessage: "Request failed: \(error.localizedDescription)")
+                            return
+                        }
+
+                        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                            session.alertMessage = "Request succeeded."
+                        } else {
+                            session.invalidate(errorMessage: "Request failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+                        }
+                    }
+                    task.resume()
+                }
+            }
         }
-        let retryInterval = DispatchTimeInterval.milliseconds(500)
-        DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
-            session.restartPolling()
-        })
     }
     
     /// - Tag: sessionBecomeActive
