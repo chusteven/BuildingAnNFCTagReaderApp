@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1C00132E2CDC88340088ABB6 /* ConfigurationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C00132D2CDC88320088ABB6 /* ConfigurationViewController.swift */; };
+		1C3A7B3B2CDF1AD600DACF9B /* WriteTagDataViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3A7B3A2CDF1AD500DACF9B /* WriteTagDataViewController.swift */; };
 		1C3D003E2CDEF0A1002B46D7 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3D003D2CDEF0A1002B46D7 /* MainViewController.swift */; };
 		1C3D00402CDEF0A8002B46D7 /* MainViewController+DataSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C3D003F2CDEF0A8002B46D7 /* MainViewController+DataSource.swift */; };
 		B41052241EC2BA04006D9146 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B41052231EC2BA04006D9146 /* AppDelegate.swift */; };
@@ -20,6 +21,7 @@
 /* Begin PBXFileReference section */
 		1426D16B1ED030FC0082EAE0 /* NFCTagReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = NFCTagReader.entitlements; path = ../NFCTagReader.entitlements; sourceTree = "<group>"; };
 		1C00132D2CDC88320088ABB6 /* ConfigurationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationViewController.swift; sourceTree = "<group>"; };
+		1C3A7B3A2CDF1AD500DACF9B /* WriteTagDataViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WriteTagDataViewController.swift; sourceTree = "<group>"; };
 		1C3D003D2CDEF0A1002B46D7 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		1C3D003F2CDEF0A8002B46D7 /* MainViewController+DataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MainViewController+DataSource.swift"; sourceTree = "<group>"; };
 		B41052201EC2BA04006D9146 /* NFCTagReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NFCTagReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -67,6 +69,7 @@
 		B41052221EC2BA04006D9146 /* NFCTagReader */ = {
 			isa = PBXGroup;
 			children = (
+				1C3A7B3A2CDF1AD500DACF9B /* WriteTagDataViewController.swift */,
 				1C3D003F2CDEF0A8002B46D7 /* MainViewController+DataSource.swift */,
 				1C3D003D2CDEF0A1002B46D7 /* MainViewController.swift */,
 				1C00132D2CDC88320088ABB6 /* ConfigurationViewController.swift */,
@@ -190,6 +193,7 @@
 				1C3D00402CDEF0A8002B46D7 /* MainViewController+DataSource.swift in Sources */,
 				1C3D003E2CDEF0A1002B46D7 /* MainViewController.swift in Sources */,
 				1C00132E2CDC88340088ABB6 /* ConfigurationViewController.swift in Sources */,
+				1C3A7B3B2CDF1AD600DACF9B /* WriteTagDataViewController.swift in Sources */,
 				B41052241EC2BA04006D9146 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

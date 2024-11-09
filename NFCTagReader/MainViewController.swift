@@ -47,83 +47,74 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                 foundError = true
                 return
             }
-            
+
+            var id: Int?
             tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
-                if .notSupported == ndefStatus {
-                    foundError = true
-                    return
-                } else if nil != error {
+                if ndefStatus == .notSupported || error != nil {
                     foundError = true
                     return
                 }
 
-                tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                    if let nfcError = error as NSError? {
-                        if nfcError.domain == "NFCErrorDomain" && nfcError.code == 403 {
-                            if .readWrite == ndefStatus {
-                                self.writeBlankNDEFTag(tag: tag) {
-                                    success in
-                                    if !success {
-                                        foundError = true
-                                        return
-                                    }
-                                }
-                            }
-                        }
-                    }
-                })
-
-                print("Found tag! Sending dummy HTTP request")
-                let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
-                let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
-                let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
-
-                print("Global Host: \(host), Global Port: \(port)\n")
-                
-                // TODO (stevenchu): Also need to read in the `id` of the tag and put that in the data body
-                // for the request too
-                let requestBody: [String: String] = ["role": responsibility]
-                guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
-                    session.alertMessage = "Failed to serialize request body."
-                    foundError = true
-                    return
-                }
-                
-                guard let url = URL(string: "http://\(host):\(port)") else {
-                    foundError = true
-                    return
-                }
-
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = httpBody
-
-                let urlSession = URLSession.shared
-                let task = urlSession.dataTask(with: request) { data, response, error in
-                    if error != nil {
-                        foundError = true
+                self.parseTag(for: tag) { extractedId, error in
+                    if let error = error {
+                        print("Error parsing tag: \(error.localizedDescription)")
+                        session.invalidate(errorMessage: error.localizedDescription)
                         return
                     }
 
-                    // Handle the response
-                    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                        // session.alertMessage = "Request succeeded."
+                    if let extractedId = extractedId {
+                        id = extractedId
+                        let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
+                        let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
+                        let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
+                        print("About to send data to \(host):\(port) and responsibility \(responsibility); got ID \(id)")
+
+                        // TODO (stevenchu): Also need to read in the `id` of the tag and put that in the data body
+                        // for the request too
+                        let requestBody: [String: String] = ["role": responsibility, "id": id != nil ? String(id!) : "unknown"]
+                        guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
+                            session.alertMessage = "Failed to serialize request body."
+                            foundError = true
+                            return
+                        }
+
+                        guard let url = URL(string: "http://\(host):\(port)") else {
+                            foundError = true
+                            return
+                        }
+
+                        var request = URLRequest(url: url)
+                        request.httpMethod = "POST"
+                        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                        request.httpBody = httpBody
+
+                        let urlSession = URLSession.shared
+                        let task = urlSession.dataTask(with: request) { data, response, error in
+                            if error != nil {
+                                foundError = true
+                                return
+                            }
+
+                            // Handle the response
+                            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                                // session.alertMessage = "Request succeeded."
+                            } else {
+                                // session.alertMessage = "Request failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? -1)"
+                            }
+                        }
+                        task.resume()
                     } else {
-                        // session.alertMessage = "Request failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? -1)"
+                        foundError = true
+                        return
                     }
                 }
-                task.resume()
-
                 return
             })
         })
         if foundError {
             // NOTE (stevenchu): This might be a thing... it wasn't working as well on my iPhone 7 as my iPhone 13 so...
             // the internet says anything to do with an NFC session needs to happen inside the main thread who knows
-            // DispatchQueue.main.async {
-            //    session.invalidate()
-            // }
+            // DispatchQueue.main.async { session.invalidate() }
             session.invalidate()
             return // Idk ...
         }
@@ -131,6 +122,34 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
         DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
             session.restartPolling()
         })
+    }
+    
+    func parseTag(for tag: NFCNDEFTag, completion: @escaping (Int?, Error?) -> Void) {
+        tag.readNDEF { message, error in
+            if let error = error {
+                print("Failed to read NFC tag: \(error.localizedDescription)")
+                completion(nil, error) // Pass the error back
+                return
+            }
+
+            guard let message = message, let record = message.records.first else {
+                print("No valid data found on NFC tag.")
+                completion(nil, NSError(domain: "NFCError", code: 1001, userInfo: [NSLocalizedDescriptionKey: "No valid data found on NFC tag."]))
+                return
+            }
+
+            // Parse the payload to extract the `id`
+            if let payloadString = String(data: record.payload, encoding: .utf8),
+               let jsonData = payloadString.data(using: .utf8),
+               let payloadDict = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any],
+               let extractedId = payloadDict["id"] as? Int {
+                print("Extracted ID: \(extractedId)")
+                completion(extractedId, nil) // Pass the ID back
+            } else {
+                print("Failed to parse payload or extract ID.")
+                completion(nil, NSError(domain: "NFCError", code: 1002, userInfo: [NSLocalizedDescriptionKey: "Failed to parse payload or extract ID."]))
+            }
+        }
     }
     
     /// - Tag: sessionBecomeActive
