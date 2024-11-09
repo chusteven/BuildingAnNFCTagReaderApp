@@ -23,7 +23,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         content_length = int(self.headers["Content-Length"])
-        _ = self.rfile.read(content_length)
+        data = self.rfile.read(content_length)
+        print(f"POST request data: {data.decode('utf-8')}")
 
         now = datetime.datetime.now()
         global first_ts
@@ -48,9 +49,10 @@ def report_status() -> None:
 
 
 def main() -> None:
-    server_address = ("", 8000)
+    port = 8001
+    server_address = ("", port)
     httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
-    print("Serving HTTP on port 8000...")
+    print(f"Serving HTTP on port {port}...")
     rt = threading.Thread(target=report_status, daemon=True)
     rt.start()
     httpd.serve_forever()

@@ -14,13 +14,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
 
     func startNFCSession() {
         guard NFCNDEFReaderSession.readingAvailable else {
-            let alertController = UIAlertController(
-                title: "Scanning Not Supported",
-                message: "This device doesn't support tag scanning.",
-                preferredStyle: .alert
-            )
-            alertController.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-            self.present(alertController, animated: true, completion: nil)
+            self.presentAlert(title: "Scanning Not Supported", message: "This device doesn't support tag scanning.")
             return
         }
 
@@ -31,92 +25,95 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
 
     /// - Tag: processingTagData
     func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {
-        DispatchQueue.main.async {
-            // Process detected NFCNDEFMessage objects.
+        DispatchQueue.main.async {  // Process detected NFCNDEFMessage objects.
             self.detectedMessages.append(contentsOf: messages)
         }
     }
 
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
-        var foundError = false
-        let tag = tags.first!
+        guard let tag = tags.first else {
+            return
+        }
 
-        session.connect(to: tag, completionHandler: { (error: Error?) in
-            if nil != error {
-                foundError = true
+        session.connect(to: tag) { [weak self] error in
+            guard let self = self else { return }
+            if error != nil {
                 return
             }
 
-            var id: Int?
-            tag.queryNDEFStatus(completionHandler: { (ndefStatus: NFCNDEFStatus, capacity: Int, error: Error?) in
+            tag.queryNDEFStatus { ndefStatus, _, error in
                 if ndefStatus == .notSupported || error != nil {
-                    foundError = true
                     return
                 }
 
-                self.parseTag(for: tag) { extractedId, error in
-                    if let error = error {
-                        foundError = true
+                self.parseTag(for: tag) { [weak self] extractedId, error in
+                    guard let self = self else { return }
+                    if error != nil {
                         return
                     }
 
-                    if let extractedId = extractedId {
-                        id = extractedId
-                        let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
-                        let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
-                        let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
-                        let requestBody: [String: String] = ["role": responsibility, "id": id != nil ? String(id!) : "unknown"]
-                        guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
-                            foundError = true
-                            return
-                        }
+                    guard let extractedId = extractedId else {
+                        return
+                    }
 
-                        guard let url = URL(string: "http://\(host):\(port)") else {
-                            foundError = true
-                            return
-                        }
+                    let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
+                    let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
+                    let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
+                    let requestBody: [String: String] = ["role": responsibility, "id": String(extractedId)]
 
-                        var request = URLRequest(url: url)
-                        request.httpMethod = "POST"
-                        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                        request.httpBody = httpBody
-                        let urlSession = URLSession.shared
-                        let task = urlSession.dataTask(with: request) { data, response, error in
+                    guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
+                        return
+                    }
+
+                    guard let url = URL(string: "http://\(host):\(port)") else {
+                        return
+                    }
+
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = httpBody
+
+                    URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+                        guard self != nil else { return }
+                        // Always switch back to the main thread for UI updates or NFC session calls
+                        DispatchQueue.main.async {
                             if error != nil {
-                                foundError = true
                                 return
                             }
 
-                            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                                // Do nothing
-                            } else {
-                                foundError = true
-                                return
+                            if let httpResponse = response as? HTTPURLResponse {
+                                if httpResponse.statusCode != 200 {
+                                    print("HTTP request did not return 200: \(httpResponse.statusCode)")
+                                } else {
+                                    print("HTTP request succeeded.")
+                                }
                             }
                         }
-                        task.resume()
-                    } else {
-                        foundError = true
-                        return
-                    }
+                    }.resume()
                 }
-                return
-            })
-        })
-        if foundError {
-            // NOTE (stevenchu): This might be a thing... it wasn't working as well on my iPhone 7 as my iPhone 13 so...
-            // the internet says anything to do with an NFC session needs to happen inside the main thread who knows
-            DispatchQueue.main.async { session.invalidate() }
-            // session.invalidate()
-            return
+            }
         }
-        let retryInterval = DispatchTimeInterval.milliseconds(500)
-        DispatchQueue.main.asyncAfter(deadline: .now() + retryInterval, execute: {
-            session.restartPolling()
-        })
+        self.restartPolling(session)
     }
     
+    private func restartPolling(_ session: NFCNDEFReaderSession) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+            guard session == self.session else {
+                print("Session is invalidated; skipping restartPolling.")
+                return
+            }
+            session.restartPolling()
+        }
+    }
+
+    private func presentAlert(title: String, message: String) {
+        let alertController = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alertController.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alertController, animated: true)
+    }
+
     func parseTag(for tag: NFCNDEFTag, completion: @escaping (Int?, Error?) -> Void) {
         tag.readNDEF { message, error in
             if let error = error {
@@ -147,31 +144,19 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     
     /// - Tag: endScanning
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
-        if let readerError = error as? NFCReaderError {
-            if readerError.code == .readerSessionInvalidationErrorSessionTimeout {
-                print("Session timeout, restarting after 0.5 second...")
-                let retryInterval = DispatchTimeInterval.milliseconds(500)
-                DispatchQueue.main.asyncAfter(deadline: .now() + retryInterval) {
-                    self.startNFCSession()
-                }
-                return
+        if let readerError = error as? NFCReaderError, readerError.code == .readerSessionInvalidationErrorSessionTimeout {
+            print("Session timeout, restarting after 0.5 second...")
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+                self.startNFCSession()
             }
-
-            if (readerError.code != .readerSessionInvalidationErrorFirstNDEFTagRead)
-                && (readerError.code != .readerSessionInvalidationErrorUserCanceled) {
-                let alertController = UIAlertController(
-                    title: "Session Invalidated",
-                    message: error.localizedDescription,
-                    preferredStyle: .alert
-                )
-                alertController.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-                DispatchQueue.main.async {
-                    self.present(alertController, animated: true, completion: nil)
-                }
+            return
+        }
+        
+        if let readerError = error as? NFCReaderError, readerError.code != .readerSessionInvalidationErrorUserCanceled {
+            DispatchQueue.main.async {
+                self.presentAlert(title: "Session Invalidated", message: error.localizedDescription)
             }
         }
-
-        self.session = nil
     }
 
     // MARK: - addMessage(fromUserActivity:)
@@ -180,5 +165,4 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
             self.detectedMessages.append(message)
         }
     }
-
 }
