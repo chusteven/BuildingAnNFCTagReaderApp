@@ -57,9 +57,8 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                     return
                 }
 
-                var id: Int?
                 tag.readNDEF(completionHandler: { (message: NFCNDEFMessage?, error: Error?) in
-                    if let error = error {
+                    if error != nil {
                         foundError = true
                         return
                     }
@@ -69,57 +68,55 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                         return
                     }
 
-                    // Parse the payload to extract the `id`
+                    var id: Int?
                     if let payloadString = String(data: record.payload, encoding: .utf8),
                        let jsonData = payloadString.data(using: .utf8),
                        let payloadDict = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any],
                        let extractedId = payloadDict["id"] as? Int {
+                        print("Extracted ID: \(extractedId)")
                         id = extractedId // Assign the parsed ID to the variable `id`
                     } else {
                         foundError = true
                         return
                     }
-                })
+                    let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
+                    let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
+                    let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
 
-                let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
-                let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
-                let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
-
-                // TODO (stevenchu): Also need to read in the `id` of the tag and put that in the data body
-                // for the request too
-                let requestBody: [String: String] = ["role": responsibility, "id": id != nil ? String(id!) : "unknown"]
-                guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
-                    session.alertMessage = "Failed to serialize request body."
-                    foundError = true
-                    return
-                }
-
-                guard let url = URL(string: "http://\(host):\(port)") else {
-                    foundError = true
-                    return
-                }
-
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = httpBody
-
-                let urlSession = URLSession.shared
-                let task = urlSession.dataTask(with: request) { data, response, error in
-                    if error != nil {
+                    let requestBody: [String: String] = ["role": responsibility, "id": id != nil ? String(id!) : "unknown"]
+                    guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
+                        session.alertMessage = "Failed to serialize request body."
                         foundError = true
                         return
                     }
 
-                    // Handle the response
-                    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                        // session.alertMessage = "Request succeeded."
-                    } else {
-                        // session.alertMessage = "Request failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? -1)"
+                    guard let url = URL(string: "http://\(host):\(port)") else {
+                        foundError = true
+                        return
                     }
-                }
-                task.resume()
 
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = httpBody
+
+                    let urlSession = URLSession.shared
+                    let task = urlSession.dataTask(with: request) { data, response, error in
+                        if error != nil {
+                            foundError = true
+                            return
+                        }
+
+                        // Handle the response
+                        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                            // session.alertMessage = "Request succeeded."
+                        } else {
+                            foundError = true
+                            return
+                        }
+                    }
+                    task.resume()
+                })
                 return
             })
         })
