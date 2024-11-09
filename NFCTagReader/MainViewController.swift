@@ -107,12 +107,12 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
         if foundError {
             // NOTE (stevenchu): This might be a thing... it wasn't working as well on my iPhone 7 as my iPhone 13 so...
             // the internet says anything to do with an NFC session needs to happen inside the main thread who knows
-            // DispatchQueue.main.async { session.invalidate() }
-            session.invalidate()
+            DispatchQueue.main.async { session.invalidate() }
+            // session.invalidate()
             return
         }
         let retryInterval = DispatchTimeInterval.milliseconds(500)
-        DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
+        DispatchQueue.main.asyncAfter(deadline: .now() + retryInterval, execute: {
             session.restartPolling()
         })
     }
