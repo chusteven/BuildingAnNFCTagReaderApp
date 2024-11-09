@@ -57,8 +57,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
 
                 self.parseTag(for: tag) { extractedId, error in
                     if let error = error {
-                        print("Error parsing tag: \(error.localizedDescription)")
-                        session.invalidate(errorMessage: error.localizedDescription)
+                        foundError = true
                         return
                     }
 
@@ -67,13 +66,8 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                         let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
                         let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
                         let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
-                        print("About to send data to \(host):\(port) and responsibility \(responsibility); got ID \(id)")
-
-                        // TODO (stevenchu): Also need to read in the `id` of the tag and put that in the data body
-                        // for the request too
                         let requestBody: [String: String] = ["role": responsibility, "id": id != nil ? String(id!) : "unknown"]
                         guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
-                            session.alertMessage = "Failed to serialize request body."
                             foundError = true
                             return
                         }
@@ -87,7 +81,6 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                         request.httpMethod = "POST"
                         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                         request.httpBody = httpBody
-
                         let urlSession = URLSession.shared
                         let task = urlSession.dataTask(with: request) { data, response, error in
                             if error != nil {
@@ -95,11 +88,11 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                                 return
                             }
 
-                            // Handle the response
                             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                                // session.alertMessage = "Request succeeded."
+                                // Do nothing
                             } else {
-                                // session.alertMessage = "Request failed with status code: \((response as? HTTPURLResponse)?.statusCode ?? -1)"
+                                foundError = true
+                                return
                             }
                         }
                         task.resume()
@@ -116,7 +109,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
             // the internet says anything to do with an NFC session needs to happen inside the main thread who knows
             // DispatchQueue.main.async { session.invalidate() }
             session.invalidate()
-            return // Idk ...
+            return
         }
         let retryInterval = DispatchTimeInterval.milliseconds(500)
         DispatchQueue.global().asyncAfter(deadline: .now() + retryInterval, execute: {
@@ -127,26 +120,21 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     func parseTag(for tag: NFCNDEFTag, completion: @escaping (Int?, Error?) -> Void) {
         tag.readNDEF { message, error in
             if let error = error {
-                print("Failed to read NFC tag: \(error.localizedDescription)")
-                completion(nil, error) // Pass the error back
+                completion(nil, error)
                 return
             }
 
             guard let message = message, let record = message.records.first else {
-                print("No valid data found on NFC tag.")
                 completion(nil, NSError(domain: "NFCError", code: 1001, userInfo: [NSLocalizedDescriptionKey: "No valid data found on NFC tag."]))
                 return
             }
 
-            // Parse the payload to extract the `id`
             if let payloadString = String(data: record.payload, encoding: .utf8),
                let jsonData = payloadString.data(using: .utf8),
                let payloadDict = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: Any],
                let extractedId = payloadDict["id"] as? Int {
-                print("Extracted ID: \(extractedId)")
-                completion(extractedId, nil) // Pass the ID back
+                completion(extractedId, nil)
             } else {
-                print("Failed to parse payload or extract ID.")
                 completion(nil, NSError(domain: "NFCError", code: 1002, userInfo: [NSLocalizedDescriptionKey: "Failed to parse payload or extract ID."]))
             }
         }
@@ -183,31 +171,14 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
             }
         }
 
-        // To read new tags, a new session instance is required
         self.session = nil
     }
 
     // MARK: - addMessage(fromUserActivity:)
-
     func addMessage(fromUserActivity message: NFCNDEFMessage) {
         DispatchQueue.main.async {
             self.detectedMessages.append(message)
         }
     }
-
-    func writeBlankNDEFTag(tag: NFCNDEFTag, completion: @escaping (Bool) -> Void) {
-            let emptyRecord = NFCNDEFPayload(format: .empty, type: Data(), identifier: Data(), payload: Data())
-            let emptyMessage = NFCNDEFMessage(records: [emptyRecord])
-
-            tag.writeNDEF(emptyMessage) { (error) in
-                if let error = error {
-                    print("Failed to write to the tag: \(error.localizedDescription)")
-                    completion(false)
-                    return
-                }
-                print("Successfully wrote blank data to the NFC tag.")
-                completion(true)
-            }
-        }
 
 }
