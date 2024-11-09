@@ -8,7 +8,7 @@
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
-        <!--Scanned Tags-->
+        <!--Heavy Metal-->
         <scene sceneID="qUT-oy-ZCJ">
             <objects>
                 <tableViewController id="kkV-3p-vKw" customClass="MessagesTableViewController" customModule="NFCTagReader" customModuleProvider="target" sceneMemberID="viewController">
@@ -44,8 +44,8 @@
                         </connections>
                     </tableView>
                     <toolbarItems/>
-                    <navigationItem key="navigationItem" title="Scanned Tags" id="sUb-7L-pDB">
-                        <barButtonItem key="leftBarButtonItem" title="Server" id="szW-im-ht8">
+                    <navigationItem key="navigationItem" title="Heavy Metal" id="sUb-7L-pDB">
+                        <barButtonItem key="leftBarButtonItem" title="Settings" id="szW-im-ht8">
                             <connections>
                                 <segue destination="5rb-7S-LDt" kind="show" id="qIT-jD-Igr"/>
                             </connections>

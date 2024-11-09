@@ -11,7 +11,6 @@ import Foundation
 
 /// - Tag: MessagesTableViewController
 class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDelegate {
-
     // MARK: - Properties
 
     let reuseIdentifier = "reuseIdentifier"
@@ -92,7 +91,7 @@ class MessagesTableViewController: UITableViewController, NFCNDEFReaderSessionDe
                     let host = UserDefaults.standard.string(forKey: "host") ?? "default.host"
                     let port = UserDefaults.standard.string(forKey: "port") ?? "8080"
 
-                    print("Global Host: \(host), Global Port: \(port)")
+                    print("Global Host: \(host), Global Port: \(port)\n")
 
                     // TODO (stevenchu): Refactor this into its own method
                     // that will probably want to send along some data of the
