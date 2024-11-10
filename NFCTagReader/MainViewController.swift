@@ -33,27 +33,32 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
         guard let tag = tags.first else {
+            print("Could not get first tag")
             return
         }
 
         session.connect(to: tag) { [weak self] error in
             guard let self = self else { return }
-            if error != nil {
+            if let error = error {
+                print("Error found when connecting to tag \(error)")
                 return
             }
 
             tag.queryNDEFStatus { ndefStatus, _, error in
                 if ndefStatus == .notSupported || error != nil {
+                    print("NFC tags not supported")
                     return
                 }
 
                 self.parseTag(for: tag) { [weak self] extractedId, error in
                     guard let self = self else { return }
-                    if error != nil {
+                    if let error = error {
+                        print("Error found when trying to parse tag \(error)")
                         return
                     }
 
                     guard let extractedId = extractedId else {
+                        print("Could not get ID from tag")
                         return
                     }
 
@@ -63,10 +68,12 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                     let requestBody: [String: String] = ["role": responsibility, "id": String(extractedId)]
 
                     guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
+                        print("Error JSON serializing body")
                         return
                     }
 
                     guard let url = URL(string: "http://\(host):\(port)") else {
+                        print("Error constructing URL")
                         return
                     }
 
@@ -80,14 +87,13 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                         // Always switch back to the main thread for UI updates or NFC session calls
                         DispatchQueue.main.async {
                             if error != nil {
+                                print("Error sending HTTP request: \(error!.localizedDescription)")
                                 return
                             }
 
                             if let httpResponse = response as? HTTPURLResponse {
                                 if httpResponse.statusCode != 200 {
                                     print("HTTP request did not return 200: \(httpResponse.statusCode)")
-                                } else {
-                                    print("HTTP request succeeded.")
                                 }
                             }
                         }
@@ -145,7 +151,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     /// - Tag: endScanning
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
         if let readerError = error as? NFCReaderError, readerError.code == .readerSessionInvalidationErrorSessionTimeout {
-            print("Session timeout, restarting after 0.5 second...")
+            print("Session timeout, restarting after 0.5 seconds...")
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
                 self.startNFCSession()
             }
@@ -154,7 +160,11 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
         
         if let readerError = error as? NFCReaderError, readerError.code != .readerSessionInvalidationErrorUserCanceled {
             DispatchQueue.main.async {
-                self.presentAlert(title: "Session Invalidated", message: error.localizedDescription)
+                print("Some other session error \(error.localizedDescription)... restarting after 0.5 seconds...")
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+                    self.startNFCSession()
+                }
+                return
             }
         }
     }

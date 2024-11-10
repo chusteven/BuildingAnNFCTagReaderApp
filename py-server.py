@@ -24,9 +24,9 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         content_length = int(self.headers["Content-Length"])
         data = self.rfile.read(content_length)
-        print(f"POST request data: {data.decode('utf-8')}")
-
         now = datetime.datetime.now()
+        print(f"[{now}] POST request data: {data.decode('utf-8')}")
+
         global first_ts
         if first_ts is None:
             first_ts = now
