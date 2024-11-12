@@ -3,12 +3,13 @@ from http.server import HTTPServer
 
 import datetime
 import json
-import threading
-import time
+import sqlite3
+import uuid
 
 
-first_ts = None
-last_ts = None
+DB_FILE = "db.db"
+db_connection = None
+PROGRAM_UUID = str(uuid.uuid4())
 
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -22,16 +23,19 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Hello, world! This is a GET response.")
 
     def do_POST(self) -> None:
-        content_length = int(self.headers["Content-Length"])
-        data = self.rfile.read(content_length)
-        now = datetime.datetime.now()
-        print(f"[{now}] POST request data: {data.decode('utf-8')}")
+        global db_connection
 
-        global first_ts
-        if first_ts is None:
-            first_ts = now
-        global last_ts
-        last_ts = now
+        content_length = int(self.headers["Content-Length"])
+        data = json.loads(self.rfile.read(content_length))
+        role = data["role"]
+        now = datetime.datetime.now()
+
+        cursor = db_connection.cursor()
+        cursor.execute(
+            "INSERT INTO sessions (session, role, ts) VALUES (?, ?, ?)",
+            (PROGRAM_UUID, role, now),
+        )
+        db_connection.commit()
 
         self.send_response(200)
         self.send_header("Content-type", "application/json")
@@ -40,22 +44,42 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response).encode("utf-8"))
 
 
-def report_status() -> None:
-    while True:
-        global first_ts
-        global last_ts
-        print(f"First timestamp: {first_ts}; last timestamp: {last_ts}")
-        time.sleep(30)
+def initialize_db():
+    global db_connection
+    db_connection = sqlite3.connect(DB_FILE, check_same_thread=False)  # Allow threading
+    cursor = db_connection.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            session TEXT,
+            role TEXT,
+            ts TIMESTAMP
+        )
+        """
+    )
+    # cursor.execute(
+    #     """
+    #     CREATE INDEX idx_session_role ON sessions (session, role)
+    #     """
+    # )
+    db_connection.commit()
 
 
 def main() -> None:
+    global db_connection
+    initialize_db()
     port = 8001
     server_address = ("", port)
     httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
     print(f"Serving HTTP on port {port}...")
-    rt = threading.Thread(target=report_status, daemon=True)
-    rt.start()
-    httpd.serve_forever()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if db_connection:
+            db_connection.close()
+        print("Server stopped and database connection closed.")
 
 
 if __name__ == "__main__":

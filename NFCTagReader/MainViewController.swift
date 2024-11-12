@@ -3,17 +3,21 @@ import CoreNFC
 import Foundation
 
 class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
+
     // MARK: - Properties
+
     let reuseIdentifier = "reuseIdentifier"
     var detectedMessages = [NFCNDEFMessage]()
     var session: NFCNDEFReaderSession?
 
+    /// - Tag: beginScanning
     @IBAction func beginScanning(_ sender: Any) {
         self.startNFCSession()
     }
 
     func startNFCSession() {
         guard NFCNDEFReaderSession.readingAvailable else {
+            // TODO: Perhaps this needs to be in the main thread as well?
             self.presentAlert(title: "Scanning Not Supported", message: "This device doesn't support tag scanning.")
             return
         }
@@ -25,7 +29,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
 
     /// - Tag: processingTagData
     func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {
-        DispatchQueue.main.async {  // Process detected NFCNDEFMessage objects.
+        DispatchQueue.main.async {
             self.detectedMessages.append(contentsOf: messages)
         }
     }
@@ -34,6 +38,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
         guard let tag = tags.first else {
             print("Could not get first tag")
+            // self.restartPolling(session) // TODO: Maybe need this??
             return
         }
 
@@ -107,7 +112,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     private func restartPolling(_ session: NFCNDEFReaderSession) {
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
             guard session == self.session else {
-                print("Session is invalidated; skipping restartPolling.")
+                print("Session is invalidated, skipping restartPolling")
                 return
             }
             session.restartPolling()
@@ -151,7 +156,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     /// - Tag: endScanning
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
         if let readerError = error as? NFCReaderError, readerError.code == .readerSessionInvalidationErrorSessionTimeout {
-            print("Session timeout, restarting after 0.5 seconds...")
+            print("Session timeout, restarting after 0.5 seconds..")
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
                 self.startNFCSession()
             }
@@ -159,13 +164,11 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
         }
         
         if let readerError = error as? NFCReaderError, readerError.code != .readerSessionInvalidationErrorUserCanceled {
-            DispatchQueue.main.async {
-                print("Some other session error \(error.localizedDescription)... restarting after 0.5 seconds...")
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
-                    self.startNFCSession()
-                }
-                return
+            print("Some other session error \"\(error.localizedDescription)\", restarting after 0.5 seconds..")
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+                self.startNFCSession()
             }
+            return
         }
     }
 
