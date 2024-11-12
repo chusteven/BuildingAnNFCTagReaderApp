@@ -14,16 +14,26 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
 
     /// - Tag: beginScanning
     @IBAction func beginScanning(_ sender: Any) {
+        logger.info("Scan button pressed")
+        if session != nil {
+            logger.error("Cannot start a new session: NFC session already exists.")
+            return
+        }
         self.startNFCSession()
     }
 
     func startNFCSession() {
         guard NFCNDEFReaderSession.readingAvailable else {
-            // TODO: Perhaps this needs to be in the main thread as well?
-            self.presentAlert(title: "Scanning Not Supported", message: "This device doesn't support tag scanning.")
+            logger.error("NFC scanning not available on this device")
+            DispatchQueue.main.async {
+                self.presentAlert(title: "Scanning Not Supported", message: "This device doesn't support tag scanning.")
+            }
             return
         }
-        guard session == nil else { return }
+        guard session == nil else {
+            logger.error("NFC session already exists")
+            return
+        }
 
         session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
         session?.alertMessage = "Start looking for treasure!"
@@ -158,22 +168,27 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     
     /// - Tag: endScanning
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
-        self.session = nil
+        DispatchQueue.main.async {
+            self.session = nil // Ensure session is cleaned up
 
-        if let readerError = error as? NFCReaderError, readerError.code == .readerSessionInvalidationErrorSessionTimeout {
-            self.logger.error("Session timeout, restarting after 0.5 seconds..")
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
-                self.startNFCSession()
+            if let readerError = error as? NFCReaderError {
+                switch readerError.code {
+                case .readerSessionInvalidationErrorSessionTimeout:
+                    self.logger.error("Session timeout, restarting after 0.5 seconds..")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+                        self.startNFCSession()
+                    }
+                case .readerSessionInvalidationErrorUserCanceled:
+                    self.logger.info("Session canceled by user.")
+                default:
+                    self.logger.error("Session invalidated: \(readerError.localizedDescription)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+                        self.startNFCSession()
+                    }
+                }
+            } else {
+                self.logger.error("Unknown session invalidation error: \(error.localizedDescription)")
             }
-            return
-        }
-        
-        if let readerError = error as? NFCReaderError, readerError.code != .readerSessionInvalidationErrorUserCanceled {
-            self.logger.error("Some other session error \"\(error.localizedDescription)\", restarting after 0.5 seconds..")
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
-                self.startNFCSession()
-            }
-            return
         }
     }
 
