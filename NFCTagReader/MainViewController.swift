@@ -23,6 +23,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
             self.presentAlert(title: "Scanning Not Supported", message: "This device doesn't support tag scanning.")
             return
         }
+        guard session == nil else { return }
 
         session = NFCNDEFReaderSession(delegate: self, queue: nil, invalidateAfterFirstRead: false)
         session?.alertMessage = "Start looking for treasure!"
@@ -157,6 +158,8 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     
     /// - Tag: endScanning
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
+        self.session = nil
+
         if let readerError = error as? NFCReaderError, readerError.code == .readerSessionInvalidationErrorSessionTimeout {
             self.logger.error("Session timeout, restarting after 0.5 seconds..")
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
