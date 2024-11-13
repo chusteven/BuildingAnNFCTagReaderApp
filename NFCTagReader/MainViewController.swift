@@ -85,33 +85,31 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                     let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
                     let requestBody: [String: String] = ["role": responsibility, "id": String(extractedId)]
 
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
-                            self.logger.error("Error JSON serializing body")
-                            return
-                        }
-                        guard let url = URL(string: "http://\(host):\(port)") else {
-                            self.logger.error("Error constructing URL")
-                            return
-                        }
-                        var request = URLRequest(url: url)
-                        request.httpMethod = "POST"
-                        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                        request.httpBody = httpBody
-
-                        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
-                            guard self != nil else { return }
-                            if error != nil {
-                                self?.logger.error("Error sending HTTP request: \(error!.localizedDescription)")
-                                return
-                            }
-                            if let httpResponse = response as? HTTPURLResponse {
-                                if httpResponse.statusCode != 200 {
-                                    self?.logger.error("HTTP request did not return 200: \(httpResponse.statusCode)")
-                                }
-                            }
-                        }.resume()
+                    guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
+                        self.logger.error("Error JSON serializing body")
+                        return
                     }
+                    guard let url = URL(string: "http://\(host):\(port)") else {
+                        self.logger.error("Error constructing URL")
+                        return
+                    }
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.httpBody = httpBody
+
+                    URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+                        guard self != nil else { return }
+                        if error != nil {
+                            self?.logger.error("Error sending HTTP request: \(error!.localizedDescription)")
+                            return
+                        }
+                        if let httpResponse = response as? HTTPURLResponse {
+                            if httpResponse.statusCode != 200 {
+                                self?.logger.error("HTTP request did not return 200: \(httpResponse.statusCode)")
+                            }
+                        }
+                    }.resume()
                 }
             }
         }
