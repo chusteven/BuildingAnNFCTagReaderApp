@@ -1,20 +1,37 @@
+import os
 import UIKit
 import CoreNFC
 import Foundation
 
 class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
+
     // MARK: - Properties
+
+    private let logger = Logger(subsystem: "com.stevenchu.NFCTagReader", category: "MainViewController")
     let reuseIdentifier = "reuseIdentifier"
     var detectedMessages = [NFCNDEFMessage]()
     var session: NFCNDEFReaderSession?
 
+    /// - Tag: beginScanning
     @IBAction func beginScanning(_ sender: Any) {
+        logger.info("Scan button pressed")
+        if session != nil {
+            logger.error("Cannot start a new session: NFC session already exists.")
+            return
+        }
         self.startNFCSession()
     }
 
     func startNFCSession() {
         guard NFCNDEFReaderSession.readingAvailable else {
-            self.presentAlert(title: "Scanning Not Supported", message: "This device doesn't support tag scanning.")
+            logger.error("NFC scanning not available on this device")
+            DispatchQueue.main.async {
+                self.presentAlert(title: "Scanning Not Supported", message: "This device doesn't support tag scanning.")
+            }
+            return
+        }
+        guard session == nil else {
+            logger.error("NFC session already exists")
             return
         }
 
@@ -25,7 +42,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
 
     /// - Tag: processingTagData
     func readerSession(_ session: NFCNDEFReaderSession, didDetectNDEFs messages: [NFCNDEFMessage]) {
-        DispatchQueue.main.async {  // Process detected NFCNDEFMessage objects.
+        DispatchQueue.main.async {
             self.detectedMessages.append(contentsOf: messages)
         }
     }
@@ -33,32 +50,33 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     /// - Tag: processingNDEFTag
     func readerSession(_ session: NFCNDEFReaderSession, didDetect tags: [NFCNDEFTag]) {
         guard let tag = tags.first else {
-            print("Could not get first tag")
+            self.logger.error("Could not get first tag")
+            // self.restartPolling(session) // TODO: Maybe need this??
             return
         }
 
         session.connect(to: tag) { [weak self] error in
             guard let self = self else { return }
             if let error = error {
-                print("Error found when connecting to tag \(error)")
+                self.logger.error("Error found when connecting to tag \(error)")
                 return
             }
 
             tag.queryNDEFStatus { ndefStatus, _, error in
                 if ndefStatus == .notSupported || error != nil {
-                    print("NFC tags not supported")
+                    self.logger.error("NFC tags not supported")
                     return
                 }
 
                 self.parseTag(for: tag) { [weak self] extractedId, error in
                     guard let self = self else { return }
                     if let error = error {
-                        print("Error found when trying to parse tag \(error)")
+                        self.logger.error("Error found when trying to parse tag \(error)")
                         return
                     }
 
                     guard let extractedId = extractedId else {
-                        print("Could not get ID from tag")
+                        self.logger.error("Could not get ID from tag")
                         return
                     }
 
@@ -68,12 +86,12 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                     let requestBody: [String: String] = ["role": responsibility, "id": String(extractedId)]
 
                     guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
-                        print("Error JSON serializing body")
+                        self.logger.error("Error JSON serializing body")
                         return
                     }
 
                     guard let url = URL(string: "http://\(host):\(port)") else {
-                        print("Error constructing URL")
+                        self.logger.error("Error constructing URL")
                         return
                     }
 
@@ -87,13 +105,13 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                         // Always switch back to the main thread for UI updates or NFC session calls
                         DispatchQueue.main.async {
                             if error != nil {
-                                print("Error sending HTTP request: \(error!.localizedDescription)")
+                                self?.logger.error("Error sending HTTP request: \(error!.localizedDescription)")
                                 return
                             }
 
                             if let httpResponse = response as? HTTPURLResponse {
                                 if httpResponse.statusCode != 200 {
-                                    print("HTTP request did not return 200: \(httpResponse.statusCode)")
+                                    self?.logger.error("HTTP request did not return 200: \(httpResponse.statusCode)")
                                 }
                             }
                         }
@@ -107,7 +125,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     private func restartPolling(_ session: NFCNDEFReaderSession) {
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
             guard session == self.session else {
-                print("Session is invalidated; skipping restartPolling.")
+                self.logger.error("Session is invalidated, skipping restartPolling")
                 return
             }
             session.restartPolling()
@@ -150,21 +168,26 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
     
     /// - Tag: endScanning
     func readerSession(_ session: NFCNDEFReaderSession, didInvalidateWithError error: Error) {
-        if let readerError = error as? NFCReaderError, readerError.code == .readerSessionInvalidationErrorSessionTimeout {
-            print("Session timeout, restarting after 0.5 seconds...")
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
-                self.startNFCSession()
-            }
-            return
-        }
-        
-        if let readerError = error as? NFCReaderError, readerError.code != .readerSessionInvalidationErrorUserCanceled {
-            DispatchQueue.main.async {
-                print("Some other session error \(error.localizedDescription)... restarting after 0.5 seconds...")
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
-                    self.startNFCSession()
+        DispatchQueue.main.async {
+            self.session = nil // Ensure session is cleaned up
+
+            if let readerError = error as? NFCReaderError {
+                switch readerError.code {
+                case .readerSessionInvalidationErrorSessionTimeout:
+                    self.logger.error("Session timeout, restarting after 0.5 seconds..")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+                        self.startNFCSession()
+                    }
+                case .readerSessionInvalidationErrorUserCanceled:
+                    self.logger.info("Session canceled by user.")
+                default:
+                    self.logger.error("Session invalidated: \(readerError.localizedDescription)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(500)) {
+                        self.startNFCSession()
+                    }
                 }
-                return
+            } else {
+                self.logger.error("Unknown session invalidation error: \(error.localizedDescription)")
             }
         }
     }

@@ -2,6 +2,9 @@
 #
 # Apple sample code gitignore configuration.
 
+# Databases
+*.db
+
 # Finder
 .DS_Store
 
