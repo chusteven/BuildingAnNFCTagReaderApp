@@ -85,7 +85,7 @@ class MainViewController: UIViewController, NFCNDEFReaderSessionDelegate {
                     let responsibility = UserDefaults.standard.string(forKey: "responsibility") ?? "unknown"
                     let requestBody: [String: String] = ["role": responsibility, "id": String(extractedId)]
 
-                    DispatchQueue.global(qos: .utility).async {
+                    DispatchQueue.global(qos: .userInitiated).async {
                         guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody, options: []) else {
                             self.logger.error("Error JSON serializing body")
                             return
