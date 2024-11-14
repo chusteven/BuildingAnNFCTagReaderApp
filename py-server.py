@@ -1,5 +1,6 @@
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
+from socketserver import ThreadingMixIn
 
 import datetime
 import json
@@ -44,9 +45,13 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(response).encode("utf-8"))
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    pass
+
+
 def initialize_db():
     global db_connection
-    db_connection = sqlite3.connect(DB_FILE, check_same_thread=False)  # Allow threading
+    db_connection = sqlite3.connect(DB_FILE, check_same_thread=False)
     cursor = db_connection.cursor()
     cursor.execute(
         """
@@ -68,10 +73,11 @@ def initialize_db():
 def main() -> None:
     global db_connection
     initialize_db()
+
     port = 8001
-    server_address = ("", port)
-    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+    httpd = ThreadedHTTPServer(("", port), SimpleHTTPRequestHandler)
     print(f"Serving HTTP on port {port}...")
+
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
