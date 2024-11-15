@@ -65,7 +65,7 @@ def play_crabwalk_effect(client: t.Any) -> bool:
     return True
 
 
-def bottleburst_effect(client: t.Any) -> bool:
+def play_bottleburst_effect(client: t.Any) -> bool:
     if bottleburst_lock.locked():
         return False
 
@@ -111,9 +111,9 @@ def play_sunnybubbles_effect(client: t.Any) -> bool:
 
 ID_TO_EFFECT_MAPPING: t.Dict[int, t.Callable] = {
     1: play_fish_effect,
-    5: play_sunnybubbles_effect,
+    53: play_sunnybubbles_effect,
     6: play_crabwalk_effect,
-    7: bottleburst_effect,
+    7: play_bottleburst_effect,
 }
 
 
@@ -139,7 +139,11 @@ class VideoRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         content_length = int(self.headers["Content-Length"])
         data = json.loads(self.rfile.read(content_length))
-        id = data["id"]
+        id = data.get("id", -1)
+        try:
+            id = int(id)
+        except:
+            id = -1
 
         func = ID_TO_EFFECT_MAPPING.get(id)
         if not func:
